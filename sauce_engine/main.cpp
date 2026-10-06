@@ -223,7 +223,7 @@ private:
 
         for(auto& obj : objects) {
             if(obj->isMovable) {
-                obj->color = RED; //* debug
+                obj->color = RED; // debug
             }
         }
     }
@@ -329,7 +329,7 @@ private:
 
                 objects[id]->vel = {0, 0, 0};
 
-                objects[id]->color = YELLOW; //* debug
+                objects[id]->color = YELLOW; // debug
 
                 Vector3 other = mass_center;
                 other.x -= objects[id]->worldpos.x * objects[id]->mass;

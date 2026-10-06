@@ -3,6 +3,7 @@
 #include <unistd.h>
 #include <signal.h>
 #include <string.h>
+#include <stdbool.h>
 
 char* fih;
 int spawnRate;
@@ -49,10 +50,7 @@ void arg_handler(int argc, char** argv) {
             ++i;
             if(i == argc) exit(1);
 
-            char* _tmp = realloc(argv[i], sizeof(char) * (strlen(argv[i]) + 1));
-            if(!_tmp) exit(1);
-
-            fih = _tmp;
+            fih = argv[i];
         }
         else if(strcmp(argv[i], "-r") == 0 || strcmp(argv[i], "--rate") == 0) {
             ++i;
