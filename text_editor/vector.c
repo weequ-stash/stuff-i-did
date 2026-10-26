@@ -27,7 +27,7 @@ vector* vector_realloc(vector* vec, size_t new_capacity) {
         }
         free(vec->data);
         free(vec);
-        return;
+        return NULL;
     }
 
     vec->data = temp;

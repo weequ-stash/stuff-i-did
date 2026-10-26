@@ -1,26 +1,86 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <unistd.h>
 #include "vector.h"
-/*
+
 #ifdef __has_include
-#if __has_include("sys/wait.h")
-#include <sys/wait.h>
-#else // Windows slop (it doesn't encode exit status)
-#define WEXITSTATUS(status) (status)
+#if __has_include("sys/select.h")
+#include <sys/select.h>
+#else // Windows slop
+#include <conio.h>
+#define WINDOWS_SLOP
 #endif
 #endif
-*/
+
+
+int WINDOW_ROWS, WINDOW_COLS;
 
 vector* g_filebufs; // names of files opened
 vector* g_curfile;  // data (strings) of current opened file
 
+size_t g_curfile_size;
+
 void print_help() {
 }
 
-void open_from_filebuf(char* filename, vector* cur_file_data);
+size_t get_filesize_bytes(char* filename) {
+    size_t filesize;
+
+    char tmp_command[7 + strlen(filename)];
+    sprintf(tmp_command, "wc -c %s", filename);
+    FILE* filesize_fp = popen(tmp_command, "r");
+    if(!filesize_fp) exit(1);
+
+    char tmp_filesize[32]; //! max 30-ish digits
+    if(!fgets(tmp_filesize, sizeof(tmp_filesize), filesize_fp)) exit(1);
+
+    filesize = atoll(tmp_filesize);
+    pclose(filesize_fp);
+
+    return filesize;
+}
+
+size_t get_filesize_lines(char* filename) {
+    FILE* fp = fopen(filename, "r");
+
+    size_t cnt = 0;
+    for(char tmp_c = fgetc(fp); tmp_c != EOF; tmp_c = fgetc(fp)){
+        if(tmp_c == '\n') ++cnt;
+    }
+    fclose(fp);
+
+    return cnt;
+}
+
+void print_lines(char* filename, int start, int end) { // 0-indexed!
+    FILE* fp = fopen(filename, "r");
+    int cnt = 0;
+    for(char tmp_c = fgetc(fp); tmp_c != EOF && cnt < start; tmp_c = fgetc(fp)){
+        if(tmp_c == '\n') ++cnt;
+    }
+    for(char tmp_c = fgetc(fp); tmp_c != EOF && cnt < end; tmp_c = fgetc(fp)){
+        if(tmp_c == '\n') ++cnt;
+        fputc(tmp_c, stdout);
+    }
+    fclose(fp);
+}
 
 void startup_handler(int argc, char** argv) {
+    char tmp_dims[32];
+
+    FILE* dims_fp = popen("tput lines", "r");
+    if(!dims_fp) exit(1);
+    if(!fgets(tmp_dims, sizeof(tmp_dims), dims_fp)) exit(1);
+    WINDOW_ROWS = atoll(tmp_dims);
+    pclose(dims_fp);
+
+    dims_fp = popen("tput cols", "r");
+    if(!dims_fp) exit(1);
+    if(!fgets(tmp_dims, sizeof(tmp_dims), dims_fp)) exit(1);
+    WINDOW_COLS = atoll(tmp_dims);
+    pclose(dims_fp);
+
     --argc;
     ++argv;
 
@@ -82,35 +142,48 @@ void startup_handler(int argc, char** argv) {
     system("echo \e[?1049h"); // save cursor pos and switch to an alternate screen buffer
     system("echo \e[H");
 
-    open_from_filebuf(g_filebufs->data[0], g_curfile);
-}
-
-void open_from_filebuf(char* filename, vector* cur_file_data) {
-    size_t filesize;
-
-    // get the filesize
-    char tmp_command[7 + strlen(filename)];
-    sprintf(tmp_command, "wc -c %s", filename);
-    FILE* filesize_fp = popen(tmp_command, "r");
-    if(!filesize_fp) exit(1);
-
-    char tmp_filesize[32]; //! max 30-ish digits
-    if(!fgets(tmp_filesize, sizeof(tmp_filesize), filesize_fp)) exit(1);
-
-    filesize = atoll(tmp_filesize);
-    pclose(filesize_fp);
-
-    if(!(g_curfile = vector_init(filesize))) exit(1);
-
-    FILE* fp = fopen(filename, "r");
-    /* TODO:
-     * get the buffer for the string
-     * and in while loop fgets the string from a file and put it in the corresponding g_curfile string
-     */
+    g_curfile_size = get_filesize_lines(g_filebufs->data[0]);
+    print_lines(g_filebufs->data[0], 0, WINDOW_ROWS);
 }
 
 void app_input_handler() {
-    getchar();
+    int cursor_y = 0;
+
+    char key;
+#ifndef WINDOWS_SLOP
+    fd_set set;
+    struct timeval timeout;
+#endif
+    while(1) {
+        // read key
+#ifdef WINDOWS_SLOP
+        key = _getch();
+#else
+        FD_ZERO(&set);
+        FD_SET(0, &set);
+        timeout.tv_sec = 0;
+        timeout.tv_usec = 100000; // 0.1 second timeout
+
+        if(select(1, &set, NULL, NULL, &timeout) > 0) {
+            read(0, &key, 1);
+        }
+#endif
+        // interpret key
+        // TODO: make so that the text updates smoothly
+        if(key == 17) break; // ^Q == 17
+        if(key == 72) {
+            cursor_y = cursor_y - 1 < 0 ? cursor_y : cursor_y - 1;
+            //system("echo \e[2J");
+            //usleep(200);
+            print_lines(g_filebufs->data[0], cursor_y, cursor_y + WINDOW_ROWS);
+        }
+        if(key == 80) {
+            cursor_y = cursor_y + 1 > g_curfile_size - WINDOW_ROWS ? cursor_y : cursor_y + 1;
+            //system("echo \e[2J");
+            //usleep(200);
+            print_lines(g_filebufs->data[0], cursor_y, cursor_y + WINDOW_ROWS);
+        }
+    }
 }
 
 int main(int argc, char** argv) {
