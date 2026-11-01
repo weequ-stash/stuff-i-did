@@ -36,7 +36,11 @@ vector* vector_realloc(vector* vec, size_t new_capacity) {
 
 void vector_push(vector* vec, const char* str) {
     if(vec->size == vec->_capacity) {
-        vec->_capacity <<= 1;
+        if(vec->_capacity <= 0)
+            vec->_capacity = 1;
+        else
+            vec->_capacity <<= 1;
+
         char** temp = realloc(vec->data, vec->_capacity * sizeof(char*));
         if(!temp) {
             for(size_t i = 0; i < vec->size; ++i) {

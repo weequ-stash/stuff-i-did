@@ -24,6 +24,10 @@ size_t g_curfile_size;
 void print_help() {
 }
 
+bool file_exists(const char *filename) {
+    return (access(filename, F_OK) == 0);
+}
+
 size_t get_filesize_bytes(char* filename) {
     size_t filesize;
 
@@ -56,10 +60,13 @@ size_t get_filesize_lines(char* filename) {
 void print_lines(char* filename, int start, int end) { // 0-indexed!
     FILE* fp = fopen(filename, "r");
     int cnt = 0;
-    for(char tmp_c = fgetc(fp); tmp_c != EOF && cnt < start; tmp_c = fgetc(fp)){
+    char tmp_c = fgetc(fp);
+    for(; tmp_c != EOF && cnt < start; tmp_c = fgetc(fp)){
         if(tmp_c == '\n') ++cnt;
     }
-    for(char tmp_c = fgetc(fp); tmp_c != EOF && cnt < end; tmp_c = fgetc(fp)){
+
+    fputc(tmp_c, stdout); // dont chop the first char
+    for(tmp_c = fgetc(fp); tmp_c != EOF && cnt < end; tmp_c = fgetc(fp)){
         if(tmp_c == '\n') ++cnt;
         fputc(tmp_c, stdout);
     }
@@ -91,6 +98,7 @@ void startup_handler(int argc, char** argv) {
             print_help();
             exit(0);
         }
+
         char tmp_filename[strlen(argv[i]) + 2];
 
         sprintf(tmp_filename, "%s ", argv[i]); // add a space at the end
@@ -99,21 +107,25 @@ void startup_handler(int argc, char** argv) {
 
     if(g_filebufs->size > 0) {
         for(int i = 0; i < g_filebufs->size; ++i) {
-            char tmp_command[4 + 2 * strlen(g_filebufs->data[i])];
+            char tmp_command[7 + 2 * strlen(g_filebufs->data[i])];
             char tmp_filename[strlen(g_filebufs->data[i]) + 1];
             strcpy(tmp_filename, g_filebufs->data[i]); // existing "filename"
 
             g_filebufs->data[i][strlen(g_filebufs->data[i]) - 1] = '~'; // new temp "filename~"
 
-            sprintf(tmp_command, "cp %s%s", tmp_filename, g_filebufs->data[i]);
+            if(!file_exists(argv[i]))
+                sprintf(tmp_command, "touch %s", g_filebufs->data[i]);
+            else
+                sprintf(tmp_command, "cp %s%s", tmp_filename, g_filebufs->data[i]);
+
 #ifdef DEBUG
-            printf("CREATED TMP FILE WITH: %s\n", tmp_command);
+            printf("CREATED TMP FILE: %s\n", tmp_command);
 #endif
             system(tmp_command);
         }
     }
     else {
-        // get the number of temp(new) files created
+        // get the number of temp(new) files already created
         FILE* dir_wc_fp = popen("find . -maxdepth 1 -type f -name '[0-9]*-new-file~' | wc -w", "r");
         if(!dir_wc_fp) exit(1);
         char digitbuf[256];
@@ -127,10 +139,10 @@ void startup_handler(int argc, char** argv) {
 
         sprintf(tmp_filename, "%s-new-file~", digitbuf);
 
-        char tmp_command[256 + 6];
+        char tmp_command[strlen(tmp_filename) + 6];
         sprintf(tmp_command, "touch %s", tmp_filename);
 #ifdef DEBUG
-        printf("CREATED TMP FILE WITH: %s\n", tmp_command);
+        printf("CREATED TMP FILE: %s\n", tmp_command);
 #endif
         system(tmp_command);
 
@@ -162,7 +174,7 @@ void app_input_handler() {
         FD_ZERO(&set);
         FD_SET(0, &set);
         timeout.tv_sec = 0;
-        timeout.tv_usec = 100000; // 0.1 second timeout
+        timeout.tv_usec = 10000; // 0.01 second timeout
 
         if(select(1, &set, NULL, NULL, &timeout) > 0) {
             read(0, &key, 1);
@@ -173,17 +185,32 @@ void app_input_handler() {
         if(key == 17) break; // ^Q == 17
         if(key == 72) {
             cursor_y = cursor_y - 1 < 0 ? cursor_y : cursor_y - 1;
-            //system("echo \e[2J");
-            //usleep(200);
+            system("echo \e[2J\e[H");
+//            usleep(200);
             print_lines(g_filebufs->data[0], cursor_y, cursor_y + WINDOW_ROWS);
         }
         if(key == 80) {
             cursor_y = cursor_y + 1 > g_curfile_size - WINDOW_ROWS ? cursor_y : cursor_y + 1;
-            //system("echo \e[2J");
-            //usleep(200);
+            system("echo \e[2J\e[H");
+//            usleep(200);
             print_lines(g_filebufs->data[0], cursor_y, cursor_y + WINDOW_ROWS);
         }
     }
+}
+
+void exit_handler() {
+    system("echo \e[?1049l"); // restore cursor pos and switch back to the original screen buffer
+
+    char tmp_command[256 + 6];
+    for(int i = 0; i < g_filebufs->size; ++i) {
+        sprintf(tmp_command, "rm ./%s", g_filebufs->data[i]);
+        system(tmp_command);
+#ifdef DEBUG
+        printf("DELETED TMP FILE: %s\n", tmp_command);
+#endif
+    }
+
+    vector_delete(g_filebufs);
 }
 
 int main(int argc, char** argv) {
@@ -193,7 +220,6 @@ int main(int argc, char** argv) {
     app_input_handler();
     // end of the main 'loop'
 
-    system("echo \e[?1049l"); // restore cursor pos and switch back to the original screen buffer
-    vector_delete(g_filebufs);
+    exit_handler();
     return 0;
 }
