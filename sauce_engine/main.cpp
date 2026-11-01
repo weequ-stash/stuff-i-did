@@ -53,8 +53,7 @@ Vector3 GetDirection(const Vector3& A, const Vector3& B) {
             d.z * rsqrt};
 }
 
-class GameObject {
-public:
+struct GameObject {
     bool isMovable = 1;
     bool isAirborn = 1;
 
@@ -80,12 +79,12 @@ private:
 
     std::vector<std::unique_ptr<GameObject>> objects;
 
-    // inner bbox
+    // outer bbox
     std::array<std::vector<std::tuple<float, bool, size_t>>, 3> collisionMapOuter; // {pos, start(0)/end(1), id}, 0 - x, 1 - y, 2 - z
     std::array<std::set<std::pair<size_t, size_t>>, 3> idsOuter;                   // {id, id} objects that are intersecting on x/y/z coordinate
     std::map<size_t, std::vector<size_t>> clustersOuter;                           // {id of representantive if a cluster of intersecting objects, ids of those objects}
 
-    // outer bbox
+    // inner bbox
     std::array<std::vector<std::tuple<float, bool, size_t>>, 3> collisionMapInner; // {pos, start(0)/end(1), id}, 0 - x, 1 - y, 2 - z
     std::array<std::set<std::pair<size_t, size_t>>, 3> idsInner;                   // {id, id} objects that are intersecting on x/y/z coordinate
     std::map<size_t, std::vector<size_t>> clustersInner;                           // {id of representantive if a cluster of intersecting objects, ids of those objects}
@@ -349,15 +348,15 @@ private:
     }
 
     void CollisionPreventPhasing() {
-        std::set<size_t> already_phased_objects; // TODO: better handling of this, rn objects get stuck being pushed out and having their vel negated at the same time
-
-        for(auto& [_, cluster] : clustersInner) {
-            if(cluster.size() <= 1) continue;
-
-            for(auto& id : cluster) {
-                already_phased_objects.insert(id);
-            }
-        }
+        // std::set<size_t> already_phased_objects; // TODO: better handling of this, rn objects get stuck being pushed out and having their vel negated at the same time
+        //
+        // for(auto& [_, cluster] : clustersInner) {
+        //     if(cluster.size() <= 1) continue;
+        //
+        //     for(auto& id : cluster) {
+        //         already_phased_objects.insert(id);
+        //     }
+        // }
 
         for(auto& [_, cluster] : clustersOuter) {
             if(cluster.size() <= 1) continue;
@@ -365,7 +364,7 @@ private:
             Vector3 old_vel[2];
 
             for(auto it = cluster.begin() + 1; it != cluster.end(); ++it) {
-                if(already_phased_objects.contains(*it)) continue;
+                // if(already_phased_objects.contains(*it)) continue;
 
                 old_vel[0] = objects[*it]->vel;
                 old_vel[1] = objects[*(it - 1)]->vel;
@@ -436,7 +435,7 @@ private:
         for(auto& obj : objects) {
             if(!obj->isAirborn || !obj->isMovable) continue; // continue, NOT A FUCKING RETURN YOU DUMBASS (the only contributor to the code is myself btw)
 
-            _ApplyForce(obj->id, {0, 0, 0}, {0, -1, 0}, GRAVITY * 0.01); // TODO optional: change the multiplier
+            _ApplyForce(obj->id, {0, 0, 0}, {0, -1, 0}, GRAVITY * 0.1); // TODO optional: change the multiplier
         }
     }
 
@@ -464,7 +463,7 @@ private:
 
         CollisionPreventPhasing();
         // CollisionResolveCollidingButNotStucked();
-        CollisionResolveStucked(clustersInner); // TODO (obsolete ig): make so that collision is calculated for the future frame and if something goes through a wall/floor, it prevents that (somethinig like wishpos)
+        // CollisionResolveStucked(clustersInner); // TODO (obsolete ig): make so that collision is calculated for the future frame and if something goes through a wall/floor, it prevents that (somethinig like wishpos)
 
         // apply stuff
         for(auto& obj : objects) {
