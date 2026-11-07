@@ -59,7 +59,7 @@ size_t get_filesize_lines(char* filename) {
 
 void print_lines(char* filename, int start, int end) { // 1-indexed, [start, end)
     char line_buffer[WINDOW_COLS + 1]; //TODO optional: review
-    char buffer[WINDOW_COLS * WINDOW_ROWS];
+    char buffer[WINDOW_COLS * WINDOW_ROWS]; //TODO: more buffer = less open file syscalls (make it like 3x larger)
 
     buffer[0] = '\0';
 
@@ -83,7 +83,7 @@ void print_lines(char* filename, int start, int end) { // 1-indexed, [start, end
             buffer[0] = '\0';
         }
 
-        if(strlen(line_buffer) >= sizeof(buffer)) {
+        if(strlen(line_buffer) >= sizeof(buffer)) { // will prevent bugs in case of line_buffer size change
             fputs(line_buffer, stdout);
             continue;
         }
@@ -205,18 +205,19 @@ void app_input_handler() {
 #endif
         // interpret key
         // TODO: make so that the text updates smoothly (kinda done)
+        // TODO: ncurses
         if(key == 17) break; // ^Q == 17
         if(key == 72) {
             cursor_y = cursor_y - 1 < 1 ? cursor_y : cursor_y - 1;
             system("echo \e[2J\e[H");
 //            usleep(200);
-            print_lines(g_filebufs->data[0], cursor_y, cursor_y + WINDOW_ROWS); //TODO: get the +- ones right (display first and last line properly)
+            print_lines(g_filebufs->data[0], cursor_y, cursor_y + WINDOW_ROWS - 1); //TODO: get the +- ones right (display first and last line properly)
         }
         if(key == 80) {
-            cursor_y = cursor_y + 1 > g_curfile_size - WINDOW_ROWS + 1 ? cursor_y : cursor_y + 1;
+            cursor_y = cursor_y + 1 > g_curfile_size - WINDOW_ROWS + 3 ? cursor_y : cursor_y + 1;
             system("echo \e[2J\e[H");
 //            usleep(200);
-            print_lines(g_filebufs->data[0], cursor_y, cursor_y + WINDOW_ROWS);
+            print_lines(g_filebufs->data[0], cursor_y, cursor_y + WINDOW_ROWS - 1);
         }
     }
 }
