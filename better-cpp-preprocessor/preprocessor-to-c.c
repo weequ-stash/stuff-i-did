@@ -387,7 +387,14 @@ void replace_lines_file(char* filename, int n, int* lines_idx, char** new_lines)
 //    ) return true;
 //}
 
-void handle_rule(char*** tokens, int big_size, int small_size) {
+void handle_rule(char*** tokens, int big_size, int* small_size) {
+    for(int i = 0; i < big_size; ++i) {
+        printf("---TOKEN:---\n");
+        for(int j = 0; j < small_size[i]; ++j) {
+            printf("%s ", tokens[i][j]);
+        }
+        printf("\n");
+    }
 }
 
 void generate_code_from_rules(char* filename, char* rulename) {
@@ -405,52 +412,82 @@ void generate_code_from_rules(char* filename, char* rulename) {
     char*** tokens = malloc(4 * sizeof(char**));
     for(int i = 0; i < 4; ++i) tokens[i] = malloc(4 * sizeof(char*));
     int big_cap = 4, big_idx = 0;
-    int* small_cap = malloc(4 * sizeof(char*));
+    int* small_cap = malloc(4 * sizeof(int));
     for(int i = 0; i < 4; ++i) small_cap[i] = 4;
-    int* small_idx = malloc(4 * sizeof(char*));
+    int* small_idx = malloc(4 * sizeof(int));
     for(int i = 0; i < 4; ++i) small_idx[i] = 0;
+
+    bool stop_left = 0, stop_right = 0;
 
     cur_token = get_token(fp);
     if(!cur_token || cur_token[0] == '}' || cur_token[0] == ';' || cur_token[0] == '=') {
-        fprintf(stderr, "%s: malformed rules found", rulename); //TODO: better error message
+        fprintf(stderr, "%s: malformed rules found (search:1)\n", rulename); //TODO: better error message
         exit(1);
     }
-    while(!cur_token) {
+    while(cur_token) {
         // left side
-        while(true) {
+        stop_left = 0;
+        while(!stop_left) {
             while(cur_token && cur_token[0] != '{') {
                 cur_token = get_token(fp);
                 if(!cur_token || cur_token[0] == ';') {
-                    fprintf(stderr, "%s: malformed rules found", rulename); //TODO: better error message
+                    fprintf(stderr, "%s: malformed rules found (search:2)\n", rulename); //TODO: better error message
                     exit(1);
                 }
 
-                if(cur_token[0] == '=') break;
+                if(cur_token[0] == '=') {
+                    stop_left = 1;
+                    break;
+                }
             }
-            if(!cur_token) {
-                fprintf(stderr, "%s: malformed rules found", rulename); //TODO: better error message
-                exit(1);
-            }
+            if(stop_left) {
+                ++big_idx;
+                if(big_idx == big_cap) {
+                    big_cap *= 2;
+                    char*** tmp = realloc(tokens, big_cap * sizeof(char**));
+                    if(!tmp) {
+                        perror(rulename);
+                        exit(1);
+                    }
+                    tokens = tmp;
 
-            cur_token = get_token(fp); //should be {
+                    for(int i = big_idx; i < big_cap; ++i) tokens[i] = malloc(4 * sizeof(char*));
+
+                    int* small_cap_tmp = realloc(small_cap, big_cap * sizeof(int));
+                    if(!small_cap_tmp) {
+                        perror(rulename);
+                        exit(1);
+                    }
+                    small_cap = small_cap_tmp;
+                    for(int i = big_idx; i < big_cap; ++i) small_cap[i] = 4;
+
+                    int* small_idx_tmp = realloc(small_idx, big_cap * sizeof(int));
+                    if(!small_idx_tmp) {
+                        perror(rulename);
+                        exit(1);
+                    }
+                    small_idx = small_idx_tmp;
+                    for(int i = big_idx; i < big_cap; ++i) small_idx[i] = 0;
+                }
+                break;
+            }
             if(!cur_token) {
-                fprintf(stderr, "%s: malformed rules found", rulename); //TODO: better error message
+                fprintf(stderr, "%s: malformed rules found (search:3)\n", rulename); //TODO: better error message
                 exit(1);
             }
 
             cur_token = get_token(fp); // first after {
             if(!cur_token || cur_token[0] == '{' || cur_token[0] == '}' || cur_token[0] == ';' || cur_token[0] == '=') {
-                fprintf(stderr, "%s: malformed rules found", rulename); //TODO: better error message
+                fprintf(stderr, "%s: malformed rules found (search:4)\n", rulename); //TODO: better error message
                 exit(1);
             }
-
             while(cur_token && cur_token[0] != '}') {
                 tokens[big_idx][small_idx[big_idx]] = strdup(cur_token);
 
                 ++small_idx[big_idx];
                 if(small_idx[big_idx] == small_cap[big_idx]) {
                     small_cap[big_idx] *= 2;
-                    char** tmp = realloc(tokens[big_idx], small_cap[big_idx]);
+                    char** tmp = realloc(tokens[big_idx], small_cap[big_idx] * sizeof(char*));
                     if(!tmp) {
                         perror(rulename);
                         exit(1);
@@ -460,43 +497,58 @@ void generate_code_from_rules(char* filename, char* rulename) {
 
                 cur_token = get_token(fp);
                 if(!cur_token || cur_token[0] == '{' || cur_token[0] == ';' || cur_token[0] == '=') {
-                    fprintf(stderr, "%s: malformed rules found", rulename); //TODO: better error message
+                    fprintf(stderr, "%s: malformed rules found (search:5)\n", rulename); //TODO: better error message
                     exit(1);
                 }
             }
             if(!cur_token) {
-                fprintf(stderr, "%s: malformed rules found", rulename); //TODO: better error message
-                exit(1);
-            }
-
-            cur_token = get_token(fp); // should be }
-            if(!cur_token) {
-                fprintf(stderr, "%s: malformed rules found", rulename); //TODO: better error message
+                fprintf(stderr, "%s: malformed rules found (search:6)\n", rulename); //TODO: better error message
                 exit(1);
             }
 
             cur_token = get_token(fp); // first after }
             if(!cur_token) {
-                fprintf(stderr, "%s: malformed rules found", rulename); //TODO: better error message
+                fprintf(stderr, "%s: malformed rules found (search:7)\n", rulename); //TODO: better error message
                 exit(1);
             }
 
             if(cur_token[0] == ';') {
-                fprintf(stderr, "%s: malformed rules found", rulename); //TODO: better error message
+                fprintf(stderr, "%s: malformed rules found (search:8)\n", rulename); //TODO: better error message
                 exit(1);
             }
-
-            if(cur_token[0] == '=') break;
 
             ++big_idx;
             if(big_idx == big_cap) {
                 big_cap *= 2;
-                char*** tmp = realloc(tokens, big_cap);
+                char*** tmp = realloc(tokens, big_cap * sizeof(char**));
                 if(!tmp) {
                     perror(rulename);
                     exit(1);
                 }
                 tokens = tmp;
+
+                for(int i = big_idx; i < big_cap; ++i) tokens[i] = malloc(4 * sizeof(char*));
+
+                int* small_cap_tmp = realloc(small_cap, big_cap * sizeof(int));
+                if(!small_cap_tmp) {
+                    perror(rulename);
+                    exit(1);
+                }
+                small_cap = small_cap_tmp;
+                for(int i = big_idx; i < big_cap; ++i) small_cap[i] = 4;
+
+                int* small_idx_tmp = realloc(small_idx, big_cap * sizeof(int));
+                if(!small_idx_tmp) {
+                    perror(rulename);
+                    exit(1);
+                }
+                small_idx = small_idx_tmp;
+                for(int i = big_idx; i < big_cap; ++i) small_idx[i] = 0;
+            }
+
+            if(cur_token[0] == '=') {
+                stop_left = 1;
+                break;
             }
         }
         // '='
@@ -507,44 +559,91 @@ void generate_code_from_rules(char* filename, char* rulename) {
         ++big_idx;
         if(big_idx == big_cap) {
             big_cap *= 2;
-            char*** tmp = realloc(tokens, big_cap);
+            char*** tmp = realloc(tokens, big_cap * sizeof(char**));
             if(!tmp) {
                 perror(rulename);
                 exit(1);
             }
             tokens = tmp;
+
+            for(int i = big_idx; i < big_cap; ++i) tokens[i] = malloc(4 * sizeof(char*));
+
+            int* small_cap_tmp = realloc(small_cap, big_cap * sizeof(int));
+            if(!small_cap_tmp) {
+                perror(rulename);
+                exit(1);
+            }
+            small_cap = small_cap_tmp;
+            for(int i = big_idx; i < big_cap; ++i) small_cap[i] = 4;
+
+            int* small_idx_tmp = realloc(small_idx, big_cap * sizeof(int));
+            if(!small_idx_tmp) {
+                perror(rulename);
+                exit(1);
+            }
+            small_idx = small_idx_tmp;
+            for(int i = big_idx; i < big_cap; ++i) small_idx[i] = 0;
         }
 
         // right side
         cur_token = get_token(fp);
         if(!cur_token || cur_token[0] == ';' || cur_token[0] == '=') {
-            fprintf(stderr, "%s: malformed rules found", rulename); //TODO: better error message
+            fprintf(stderr, "%s: malformed rules found (search:9)\n", rulename); //TODO: better error message
             exit(1);
         }
-        while(true) {
+        stop_right = 0;
+        while(!stop_right) {
             while(cur_token && cur_token[0] != '{') {
                 cur_token = get_token(fp);
                 if(!cur_token || cur_token[0] == '=') {
-                    fprintf(stderr, "%s: malformed rules found", rulename); //TODO: better error message
+                    fprintf(stderr, "%s: malformed rules found (search:10)\n", rulename); //TODO: better error message
                     exit(1);
                 }
 
-                if(cur_token[0] == ';') break;
+                if(cur_token[0] == ';') {
+                    stop_right = 1;
+                    break;
+                }
             }
-            if(!cur_token) {
-                fprintf(stderr, "%s: malformed rules found", rulename); //TODO: better error message
-                exit(1);
-            }
+            if(stop_right) {
+                ++big_idx;
+                if(big_idx == big_cap) {
+                    big_cap *= 2;
+                    char*** tmp = realloc(tokens, big_cap * sizeof(char**));
+                    if(!tmp) {
+                        perror(rulename);
+                        exit(1);
+                    }
+                    tokens = tmp;
 
-            cur_token = get_token(fp); //should be {
+                    for(int i = big_idx; i < big_cap; ++i) tokens[i] = malloc(4 * sizeof(char*));
+
+                    int* small_cap_tmp = realloc(small_cap, big_cap * sizeof(int));
+                    if(!small_cap_tmp) {
+                        perror(rulename);
+                        exit(1);
+                    }
+                    small_cap = small_cap_tmp;
+                    for(int i = big_idx; i < big_cap; ++i) small_cap[i] = 4;
+
+                    int* small_idx_tmp = realloc(small_idx, big_cap * sizeof(int));
+                    if(!small_idx_tmp) {
+                        perror(rulename);
+                        exit(1);
+                    }
+                    small_idx = small_idx_tmp;
+                    for(int i = big_idx; i < big_cap; ++i) small_idx[i] = 0;
+                }
+                break;
+            }
             if(!cur_token) {
-                fprintf(stderr, "%s: malformed rules found", rulename); //TODO: better error message
+                fprintf(stderr, "%s: malformed rules found (search:11)\n", rulename); //TODO: better error message
                 exit(1);
             }
 
             cur_token = get_token(fp); // first after {
             if(!cur_token || cur_token[0] == '{' || cur_token[0] == '}' || cur_token[0] == ';' || cur_token[0] == '=') {
-                fprintf(stderr, "%s: malformed rules found", rulename); //TODO: better error message
+                fprintf(stderr, "%s: malformed rules found (search:12)\n", rulename); //TODO: better error message
                 exit(1);
             }
 
@@ -554,7 +653,7 @@ void generate_code_from_rules(char* filename, char* rulename) {
                 ++small_idx[big_idx];
                 if(small_idx[big_idx] == small_cap[big_idx]) {
                     small_cap[big_idx] *= 2;
-                    char** tmp = realloc(tokens[big_idx], small_cap[big_idx]);
+                    char** tmp = realloc(tokens[big_idx], small_cap[big_idx] * sizeof(char*));
                     if(!tmp) {
                         perror(rulename);
                         exit(1);
@@ -564,46 +663,59 @@ void generate_code_from_rules(char* filename, char* rulename) {
 
                 cur_token = get_token(fp);
                 if(!cur_token || cur_token[0] == '{' || cur_token[0] == ';' || cur_token[0] == '=') {
-                    fprintf(stderr, "%s: malformed rules found", rulename); //TODO: better error message
+                    fprintf(stderr, "%s: malformed rules found (search:13)\n", rulename); //TODO: better error message
                     exit(1);
                 }
             }
             if(!cur_token) {
-                fprintf(stderr, "%s: malformed rules found", rulename); //TODO: better error message
-                exit(1);
-            }
-
-            cur_token = get_token(fp); // should be }
-            if(!cur_token) {
-                fprintf(stderr, "%s: malformed rules found", rulename); //TODO: better error message
+                fprintf(stderr, "%s: malformed rules found (search:14)\n", rulename); //TODO: better error message
                 exit(1);
             }
 
             cur_token = get_token(fp); // first after }
             if(!cur_token) {
-                fprintf(stderr, "%s: malformed rules found", rulename); //TODO: better error message
+                fprintf(stderr, "%s: malformed rules found (search:15)\n", rulename); //TODO: better error message
                 exit(1);
             }
 
             ++big_idx;
             if(big_idx == big_cap) {
                 big_cap *= 2;
-                char*** tmp = realloc(tokens, big_cap);
+                char*** tmp = realloc(tokens, big_cap * sizeof(char**));
                 if(!tmp) {
                     perror(rulename);
                     exit(1);
                 }
                 tokens = tmp;
+
+                for(int i = big_idx; i < big_cap; ++i) tokens[i] = malloc(4 * sizeof(char*));
+
+                int* small_cap_tmp = realloc(small_cap, big_cap * sizeof(int));
+                if(!small_cap_tmp) {
+                    perror(rulename);
+                    exit(1);
+                }
+                small_cap = small_cap_tmp;
+                for(int i = big_idx; i < big_cap; ++i) small_cap[i] = 4;
+
+                int* small_idx_tmp = realloc(small_idx, big_cap * sizeof(int));
+                if(!small_idx_tmp) {
+                    perror(rulename);
+                    exit(1);
+                }
+                small_idx = small_idx_tmp;
+                for(int i = big_idx; i < big_cap; ++i) small_idx[i] = 0;
             }
 
             if(cur_token[0] == '=') {
-                fprintf(stderr, "%s: malformed rules found", rulename); //TODO: better error message
+                fprintf(stderr, "%s: malformed rules found (search:16)\n", rulename); //TODO: better error message
                 exit(1);
             }
-
-            if(cur_token[0] == ';') break;
+            if(cur_token[0] == ';') {
+                stop_right = 1;
+                break;
+            }
         }
-
         // ';'
         tokens[big_idx][small_idx[big_idx]] = strdup(cur_token); // should be tokens[big_idx][0]
 
@@ -623,15 +735,15 @@ void generate_code_from_rules(char* filename, char* rulename) {
         tokens = malloc(4 * sizeof(char**));
         for(int i = 0; i < 4; ++i) tokens[i] = malloc(4 * sizeof(char*));
         big_cap = 4, big_idx = 0;
-        small_cap = malloc(4 * sizeof(char*));
+        small_cap = malloc(4 * sizeof(int));
         for(int i = 0; i < 4; ++i) small_cap[i] = 4;
-        small_idx = malloc(4 * sizeof(char*));
+        small_idx = malloc(4 * sizeof(int));
         for(int i = 0; i < 4; ++i) small_idx[i] = 0;
 
         // pre-left check
         cur_token = get_token(fp);
         if(!cur_token || cur_token[0] == '}' || cur_token[0] == ';' || cur_token[0] == '=') {
-            fprintf(stderr, "%s: malformed rules found", rulename); //TODO: better error message
+            fprintf(stderr, "%s: malformed rules found (search:17)\n", rulename); //TODO: better error message
             exit(1);
         }
     }
@@ -652,7 +764,8 @@ void generate_code_from_rules(char* filename, char* rulename) {
 }
 
 void include_file(char* file, char* destination) {
-//    printf("%s\n", file);
+    printf("IMPORT: %s\n", file);
+    generate_code_from_rules(destination, file);
 }
 
 int needs_include(char* token) {
